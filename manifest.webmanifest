@@ -1,0 +1,24 @@
+{
+  "id": "./",
+  "name": "小伊的成长星球",
+  "short_name": "小伊的星球",
+  "start_url": "./#record",
+  "scope": "./",
+  "display": "browser",
+  "background_color": "#eef7ff",
+  "theme_color": "#eef7ff",
+  "icons": [
+    {
+      "src": "./assets/qiuqiu-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./assets/qiuqiu-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
