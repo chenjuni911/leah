@@ -1,5 +1,6 @@
 import { CATEGORIES, familyDay, activeEntries, balance, completedTasks, recordTask, undoEntry, wishProgress, periodEntries, statistics } from './domain.js';
-import { STORAGE_KEY, readState, transact, withStorageLock } from './store.js';
+import { STORAGE_KEY } from './store.js';
+import { createCloudUI } from './cloud-ui.js';
 import { createStage2, signed, typeNames } from './stage2-ui.js';
 
 const main = document.querySelector('#main');
@@ -9,6 +10,12 @@ const feedbackMessage = document.querySelector('#feedback-message');
 const undoButton = document.querySelector('#undo-button');
 const dialog = document.querySelector('#confirm-dialog');
 let state;
+const cloudUI = createCloudUI({
+  getState: () => state,
+  accept: value => { state = value; main.hidden = false; document.querySelector('#manage-toggle').disabled = false; render(); },
+  block: () => { state = null; main.innerHTML = ''; main.hidden = true; navigation.innerHTML = ''; document.querySelector('#manage-toggle').disabled = true; },
+  notify: (...args) => showFeedback(...args),
+});
 let managing = false;
 const stage2 = createStage2({ getState: () => state, isManaging: () => managing, mutate, render, notify: showFeedback, setState: value => { state = value; } });
 let period = 'month';
@@ -87,6 +94,7 @@ function growthPage() {
   return `${stage2.toolbar()}${heading('<span aria-hidden="true">📊</span> 小伊的成长', '努力的每一天，都在让你变得更棒！')}<div class="growth-toolbar"><h2>每一步都留下足迹</h2><div class="period-switch" role="group" aria-label="统计时间范围">${[['week', '本周'], ['month', '本月'], ['all', '全部']].map(([id, name]) => `<button type="button" data-period="${id}" aria-pressed="${id === period}">${name}</button>`).join('')}</div></div><div class="stats-grid"><section><span class="stat-emoji" aria-hidden="true">⭐</span><p>获得积分</p><strong>${stats.earned}<span> 积分</span></strong></section><section><span class="stat-emoji" aria-hidden="true">✅</span><p>完成任务</p><strong>${stats.tasks}<span> 次</span></strong></section><section><span class="stat-emoji" aria-hidden="true">🗓️</span><p>有记录的日子</p><strong>${stats.days}<span> 天</span></strong></section><section><span class="stat-emoji" aria-hidden="true">🏆</span><p>兑换愿望</p><strong>${stats.redemptions}<span> 次</span></strong></section></div><section class="category-summary"><h2>各分类完成情况</h2><div class="category-bars">${CATEGORIES.map(c => `<div class="category-bar ${c.id}"><span><span aria-hidden="true">${categoryEmoji[c.id]}</span>${c.name}</span><div><i style="width:${stats.categories[c.id] / max * 100}%"></i></div><strong>${stats.categories[c.id]}<small> 次</small></strong></div>`).join('')}</div></section>${stage2.growthExtras()}<section class="recent-section"><div class="content-heading"><h2>成长记录</h2><span>积分和努力，都有迹可循</span></div>${recordsList(entries,{limit:historyLimit})}${historyControls(entries.length)}</section><div class="data-footer"><button type="button" class="text-link" data-action="data">备份与导出</button></div>`;
 }
 function render({ preserveFocus = true } = {}) {
+  if (!state) return;
   const active = document.activeElement;
   const focusTask = preserveFocus && active?.dataset?.task;
   const focusPeriod = preserveFocus && active?.dataset?.period;
@@ -113,13 +121,13 @@ function hideFeedback() { feedback.hidden = true; undoId = null; clearTimeout(no
 function fatal(error) {
   main.innerHTML = `<section class="load-error"><h1>暂时没能读取成长记录</h1><p>原有数据没有被覆盖。可以下载一份原始数据，再重新打开页面。</p><p class="error-detail">${escape(error.message || '浏览器可能限制了本地保存。')}</p><button class="primary-button" type="button" data-retry>重新读取</button><button class="secondary-button" type="button" data-export>下载原始数据</button></section>`;
 }
-function readAndRender() { try { state = readState(localStorage); render(); } catch (error) { fatal(error); } }
+function readAndRender() { void cloudUI.refresh(); }
 async function mutate(update) {
   if (busy) return null;
   busy = true;
   try {
-    const result = await withStorageLock(() => transact(localStorage, update));
-    state = result.state;
+    const result = await cloudUI.mutate(update);
+    if (!state || result.state.revision >= state.revision) state = result.state;
     render();
     return result;
   } catch (error) {
@@ -148,7 +156,7 @@ taskDialog.innerHTML='<form method="dialog"><span class="dialog-icon" aria-hidde
 document.body.append(taskDialog);
 let pendingTask=null;
 function confirmTask(taskId) {
-  if(busy || taskDialog.open)return;
+  if(!state || busy || taskDialog.open)return;
   const task=state.tasks.find(t=>t.id===taskId && t.active && !t.deletedAt);
   if(!task || completedTasks(state).has(taskId))return;
   pendingTask={id:taskId,revision:state.revision,day:familyDay()};
@@ -202,11 +210,11 @@ document.querySelector('#manage-toggle').addEventListener('click',()=>{managing=
 undoButton.addEventListener('click', () => { if (undoId) void undo(undoId); });
 document.querySelector('#dismiss-feedback').addEventListener('click', hideFeedback);
 window.addEventListener('hashchange', () => { if (state) { historyLimit=5; render({ preserveFocus: false }); main.focus({ preventScroll: true }); window.scrollTo({ top: 0, behavior: 'instant' }); } });
-window.addEventListener('storage', event => { if (event.key === STORAGE_KEY || event.key === null) readAndRender(); });
+// Cloud snapshots are authoritative; legacy browser data stays untouched.
 document.addEventListener('visibilitychange', () => { if (!document.hidden) readAndRender(); });
 window.addEventListener('focus', readAndRender);
 setInterval(() => { if (familyDay() !== shownDay && !document.hidden) readAndRender(); }, 1000);
-readAndRender();
+void cloudUI.start();
 
 // Optional browser-agent access shares the exact same recording path as the UI.
 if (document.modelContext?.registerTool) {

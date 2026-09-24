@@ -1,6 +1,6 @@
 import { CATEGORIES, WISH_ICONS, activeEntries, balance, examPoints, familyDay, migrateState } from './domain.js';
 import * as op from './operations.js';
-import { RECOVERY_KEY, restoreState, withStorageLock, readState } from './store.js';
+import { RECOVERY_KEY } from './store.js';
 
 export const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 export const signed = n => n > 0 ? `+${n}` : String(n);
@@ -134,7 +134,14 @@ export function createStage2({ getState, isManaging, mutate, render, notify, set
   function confirmRestore(imported,name) {
     const revision=state().revision;
     open('核对备份并恢复',`<p class="form-hint">${esc(name)}</p><div class="confirmation-summary"><strong>${balance(imported)} 积分</strong><span>${imported.tasks.filter(t=>!t.deletedAt).length} 项任务 · ${imported.wishes.filter(w=>!w.deletedAt).length} 个愿望</span><span>${activeEntries(imported).length} 条有效记录 · ${(imported.achievements||[]).filter(a=>!a.deletedAt).length} 个自定义成就</span></div><p class="form-hint">将替换当前 ${balance(state())} 积分、${activeEntries(state()).length} 条记录。当前数据会自动保留为恢复副本。</p>`,async()=>{
-      const result=await withStorageLock(()=>restoreState(localStorage,imported,revision));setState(result.state);render();notify('备份已恢复。');return true;
+      const previous=structuredClone(state());
+      localStorage.setItem(RECOVERY_KEY,JSON.stringify(previous));
+      const result=await mutate(before=>{
+        if(before.revision!==revision)throw new Error('记录刚刚发生变化，请重新选择备份并确认。');
+        return {state:{...structuredClone(imported),revision:before.revision+1},entry:null};
+      });
+      if(!result)return false;
+      notify('备份已恢复并同步到云端。');return true;
     },'确认恢复');
   }
   document.body.addEventListener('click',event=>{
@@ -143,8 +150,8 @@ export function createStage2({ getState, isManaging, mutate, render, notify, set
     const id=button.dataset.id||null;
     const actions={ 'edit-achievement':()=>editAchievement(id),'delete-achievement':()=>removeAchievement(id),'shuffle-achievement':()=>{const input=editor.querySelector('[name=icon]');const icons=WISH_ICONS.filter(i=>i!==input.value);input.value=icons[Math.floor(Math.random()*icons.length)];editor.querySelector('#achievement-icon').textContent=input.value;}, 'edit-task':()=>editTask(id),'edit-wish':()=>editWish(id),'other':otherRecord,'rewards':()=>ruleMenu(false),'improve':()=>ruleMenu(true),'record-rule':()=>ruleRecord(id),'custom-reward':customReward,'exam':exam,'adjust':adjustment,'redeem':()=>redeem(id),'delete-task':()=>remove('task',id),'delete-wish':()=>remove('wish',id),'edit-entry':()=>editRecord(id),'rules':rulesManagement,'edit-rule':()=>editRule(id),'data':dataManagement,
       'select-wish':()=>commit(before=>op.selectWish(before,id),'当前目标已更新。'),
-      'export-json':()=>{download(op.makeBackup(readState(localStorage)),`小伊成长星球-完整备份-${familyDay()}.json`);notify('完整备份已下载。');},
-      'export-csv':()=>{download(op.toCSV(readState(localStorage)),`小伊成长星球-积分明细-${familyDay()}.csv`,'text/csv;charset=utf-8');notify('明细已导出。');},
+      'export-json':()=>{download(op.makeBackup(state()),`小伊成长星球-完整备份-${familyDay()}.json`);notify('完整备份已下载。');},
+      'export-csv':()=>{download(op.toCSV(state()),`小伊成长星球-积分明细-${familyDay()}.csv`,'text/csv;charset=utf-8');notify('明细已导出。');},
       'restore-previous':()=>{const raw=localStorage.getItem(RECOVERY_KEY);if(raw)confirmRestore(migrateState(JSON.parse(raw)),'上一次导入前的数据');},
     };
     try { Promise.resolve(actions[button.dataset.action]?.()).catch(error=>notify(error.message,null,true)); } catch(error) {notify(error.message,null,true);}

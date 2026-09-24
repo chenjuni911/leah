@@ -1,0 +1,4 @@
+.cloud-bar{max-width:1080px;margin:8px auto;padding:8px 24px;display:flex;justify-content:space-between;align-items:center;gap:12px;color:#68618e;font-size:13px;min-height:38px}
+.cloud-panel{max-width:480px;margin:30px auto;padding:28px;background:#ffffffed;border:1px solid #e8e4ff;border-radius:26px;box-shadow:0 12px 40px #7971ba15;text-align:center}
+.cloud-panel[hidden]{display:none}.cloud-panel h1{font-size:24px}.cloud-panel p{color:#68758e;line-height:1.8}.cloud-panel form{display:grid;gap:16px;text-align:left}.cloud-panel label{display:grid;gap:8px}.cloud-panel input{width:100%;padding:12px;border:1px solid #d7d4ec;border-radius:12px;font:inherit;box-sizing:border-box}.cloud-panel button{margin:6px}.cloud-panel .form-error{color:#bd3153}.cloud-bird{width:110px;height:130px;object-fit:contain}.cloud-panel .confirmation-summary{margin:20px 0}
+@media(max-width:600px){.cloud-panel{margin:18px 16px;padding:22px}.cloud-bar{padding:8px 18px}}
