@@ -142,8 +142,28 @@ function encourage() {
   bubble.classList.add('is-cheering');clearTimeout(cheerTimer);
   cheerTimer=setTimeout(()=>{if(bubble.isConnected){bubble.classList.remove('is-cheering');bubble.innerHTML=wishProgress(state).wish && wishProgress(state).remaining===0?'愿望攒够啦<br>可以兑换啦！':'我是球球<br>和你一起<br>加油！';}},4500);
 }
-async function complete(taskId) {
-  const result = await mutate(before => recordTask(before, taskId));
+const taskDialog = document.createElement('dialog');
+taskDialog.id='task-confirm-dialog';taskDialog.setAttribute('aria-labelledby','task-confirm-title');
+taskDialog.innerHTML='<form method="dialog"><span class="dialog-icon" aria-hidden="true">⭐</span><h2 id="task-confirm-title">确认完成这项任务？</h2><p id="task-confirm-description"></p><div class="dialog-actions"><button value="cancel" class="secondary-button" autofocus>暂不记录</button><button value="confirm" class="primary-button">确认完成</button></div></form>';
+document.body.append(taskDialog);
+let pendingTask=null;
+function confirmTask(taskId) {
+  if(busy || taskDialog.open)return;
+  const task=state.tasks.find(t=>t.id===taskId && t.active && !t.deletedAt);
+  if(!task || completedTasks(state).has(taskId))return;
+  pendingTask={id:taskId,revision:state.revision,day:familyDay()};
+  taskDialog.querySelector('p').textContent=`「${task.name}」${task.standard?'（'+task.standard+'）':''}已完成了吗？确认后增加 ${task.points} 积分。`;
+  taskDialog.returnValue='';taskDialog.showModal();
+}
+taskDialog.addEventListener('close',()=>{
+  const pending=pendingTask;pendingTask=null;
+  if(taskDialog.returnValue==='confirm' && pending)void complete(pending.id,pending);
+});
+async function complete(taskId, expected) {
+  const result = await mutate(before => {
+    if(expected && (before.revision!==expected.revision || familyDay()!==expected.day))throw new Error('记录或日期已经变化，请重新点选任务并确认。');
+    return recordTask(before, taskId);
+  });
   if (result?.entry) { showFeedback(`球球：${result.entry.name}完成啦！ +${result.entry.points} 积分`, result.entry.id); encourage(); }
   else if (result) showFeedback('这项任务今天已经记录过啦。');
   return result;
@@ -158,7 +178,7 @@ main.addEventListener('click', event => {
   if (!button) return;
   if (button.hasAttribute('data-history-more')) { historyLimit = historyLimit===5?20:historyLimit+20; render(); return; }
   if (button.hasAttribute('data-history-less')) { historyLimit=5; render(); return; }
-  if (button.dataset.task) { void complete(button.dataset.task); return; }
+  if (button.dataset.task) { confirmTask(button.dataset.task); return; }
   if (button.dataset.period) { period = button.dataset.period; historyLimit=5; render(); return; }
   if (button.dataset.undo) {
     const entry = state.entries.find(e => e.id === button.dataset.undo && !e.voidedAt);
@@ -191,11 +211,10 @@ readAndRender();
 // Optional browser-agent access shares the exact same recording path as the UI.
 if (document.modelContext?.registerTool) {
   const lifecycle = new AbortController();
-  const tool = { name: 'record_completed_task', title: '记录已完成的任务', description: '记录小伊已经完成的一项固定任务，立即增加积分。同一任务北京时间每天最多一次。', inputSchema: { type: 'object', properties: { taskId: { type: 'string', description: '当前固定任务的稳定编号' } }, required: ['taskId'], additionalProperties: false }, annotations: { readOnlyHint: false }, async execute(input) {
+  const tool = { name: 'record_completed_task', title: '记录已完成的任务', description: '打开固定任务确认窗口，用户确认后才增加积分。同一任务北京时间每天最多一次。', inputSchema: { type: 'object', properties: { taskId: { type: 'string', description: '当前固定任务的稳定编号' } }, required: ['taskId'], additionalProperties: false }, annotations: { readOnlyHint: false }, async execute(input) {
     if (!input || typeof input.taskId !== 'string' || Object.keys(input).some(k => k !== 'taskId') || !state?.tasks.some(t => t.id === input.taskId)) throw new Error('请提供有效的任务编号。');
-    const result = await complete(input.taskId);
-    if (!result) throw new Error('记录没有保存，请查看页面提示后重试。');
-    return { recorded: Boolean(result.entry), points: balance(result.state) };
+    confirmTask(input.taskId);
+    return { recorded: false, awaitingConfirmation: taskDialog.open, points: balance(state) };
   } };
   try { Promise.resolve(document.modelContext.registerTool(tool, { signal: lifecycle.signal })).catch(() => {}); } catch { /* Browsers without this optional proposal remain fully usable. */ }
   window.addEventListener('pagehide', () => lifecycle.abort(), { once: true });
