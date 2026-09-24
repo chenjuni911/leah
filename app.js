@@ -21,7 +21,7 @@ let cheerTimer;
 const escape = value => String(value).replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character]));
 const routes = [{ id: 'record', name: '记录', icon: 'check' }, { id: 'wishes', name: '愿望', icon: 'heart' }, { id: 'growth', name: '成长', icon: 'chart' }];
 const categoryEmoji = { chinese: '📖', math: '🔢', english: '🔤', sport: '🏃', life: '🌱', other: '✨' };
-const qiuqiuAsset = './assets/qiuqiu-illustration.png';
+const qiuqiuAsset = './assets/qiuqiu-640.webp';
 function icon(name, className = '') {
   const paths = {
     check: '<path d="m5 12 4 4L19 6"/>',
@@ -46,7 +46,7 @@ function heading(title, subtitle) { return `<div class="page-heading"><div><p cl
 function pointsCard() {
   return `<section class="points-card" aria-label="我的积分"><span class="points-star" aria-hidden="true">⭐</span><div><div class="card-label">我的积分</div><div class="points-total"><strong id="current-points">${balance(state)}</strong><span>积分</span></div></div><a href="#growth" class="points-detail" aria-label="查看积分记录">${icon('arrow')}</a></section>`;
 }
-function companion(className = '') { return `<img src="${qiuqiuAsset}" width="380" height="480" alt="黄色玄凤球球" class="qiuqiu ${className}" />`; }
+function companion(className = '') { return `<img src="${qiuqiuAsset}" srcset="./assets/qiuqiu-320.webp 320w, ./assets/qiuqiu-640.webp 640w" sizes="(max-width:600px) 200px, 260px" decoding="async" width="380" height="480" alt="黄色玄凤球球" class="qiuqiu ${className}" />`; }
 function greeting() {
   return `<section class="greeting"><div class="greeting-copy"><h1 aria-label="小伊，今天也很棒！">小伊，<br>今天也很棒！</h1><p>坚持做喜欢的事，<br>成为更好的自己！</p>${pointsCard()}</div><div class="companion-scene"><span class="sun-sticker" aria-hidden="true">☀️</span>${companion('hero-bird')}<p class="speech-bubble">${wishProgress(state).wish && wishProgress(state).remaining===0 ? '愿望攒够啦<br>可以兑换啦！' : '我是球球<br>和你一起<br>加油！'}<span aria-hidden="true">♥</span></p></div></section>`;
 }
